@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>👻 Ghost of the Day — playable preview</title>
+    <style>
+/* 👻 Ghost of the Day — one stylesheet for the inline post (splash) and the
+   expanded game. No external fonts or assets: everything ships in the bundle so
+   the webview works inside Reddit's CSP. */
+
+:root {
+  --night: #07050f;
+  --night-2: #100a1f;
+  --panel: rgba(24, 16, 43, 0.72);
+  --line: rgba(150, 120, 255, 0.22);
+  --ink: #ece7ff;
+  --ink-dim: #a99ed0;
+  --amber: #ffbe55;
+  --amber-hot: #ff9d2e;
+  --here: #e9dcff;
+  --hot: #ff5a6a;
+  --warm: #ffb545;
+  --cold: #6ea8ff;
+  --violet: #a97cff;
+  --radius: 14px;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-spooky: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--night);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+
+body {
+  background:
+    radial-gradient(120% 80% at 50% -10%, #241546 0%, rgba(16, 10, 31, 0.6) 45%, transparent 70%),
+    radial-gradient(80% 60% at 100% 110%, rgba(72, 40, 130, 0.5) 0%, transparent 60%),
+    radial-gradient(70% 50% at 0% 100%, rgba(30, 60, 120, 0.35) 0%, transparent 60%),
+    var(--night);
+  background-attachment: fixed;
+}
+
+/* Drifting fog. Pure CSS, two soft blobs, very cheap. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  pointer-events: none;
+  background: radial-gradient(38% 32% at 30% 40%, rgba(120, 90, 220, 0.16), transparent 70%);
+  animation: drift 26s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+body::after {
+  background: radial-gradient(30% 26% at 70% 65%, rgba(60, 110, 200, 0.14), transparent 70%);
+  animation-duration: 34s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) scale(1.12);
+  }
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.scene {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 14px 14px 26px;
+}
+
+.game .scene {
+  min-height: 100dvh;
+  justify-content: safe center;
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hud-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.logo {
+  font-size: 20px;
+  filter: drop-shadow(0 0 8px rgba(169, 124, 255, 0.8));
+  animation: bob 4.5s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(3deg);
+  }
+}
+
+.title {
+  font-family: var(--font-spooky);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title b {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.candles {
+  display: flex;
+  gap: 2px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.candles span {
+  transition: opacity 0.35s ease, filter 0.35s ease, transform 0.35s ease;
+}
+
+.candles span.spent {
+  opacity: 0.22;
+  filter: grayscale(1);
+  transform: scale(0.86);
+}
+
+.streak {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+.streak.idle {
+  color: var(--ink-dim);
+  font-weight: 500;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  text-align: center;
+  min-height: 2.9em;
+}
+
+.hint strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- board */
+
+.board {
+  position: relative;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid, 7), 1fr);
+  gap: 6px;
+  padding: 10px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 120% at 50% 0%, rgba(80, 52, 140, 0.35), transparent 60%),
+    rgba(11, 7, 22, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 40px -24px #000;
+}
+
+.tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid rgba(140, 110, 220, 0.18);
+  border-radius: 9px;
+  background:
+    linear-gradient(180deg, rgba(38, 26, 68, 0.9), rgba(20, 13, 36, 0.95));
+  color: var(--ink);
+  font-size: clamp(15px, 5.1vw, 22px);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.2s ease, box-shadow 0.25s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Whisper of a different room behind each door. */
+.tile:nth-child(3n + 1) {
+  background: linear-gradient(165deg, rgba(44, 30, 80, 0.92), rgba(19, 12, 34, 0.96));
+}
+
+.tile:nth-child(4n + 2) {
+  background: linear-gradient(15deg, rgba(38, 26, 70, 0.92), rgba(16, 11, 29, 0.96));
+}
+
+.tile:nth-child(5n + 3) {
+  background: linear-gradient(200deg, rgba(33, 24, 62, 0.92), rgba(21, 14, 38, 0.96));
+}
+
+/* Unlit rooms show a faint dust speck so the mansion reads as "unexplored". */
+.tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(40% 40% at 30% 30%, rgba(255, 255, 255, 0.05), transparent 70%);
+  opacity: 0.9;
+}
+
+.tile:disabled {
+  cursor: default;
+}
+
+.tile.can-probe:hover,
+.tile.can-probe:focus-visible {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 1px rgba(255, 190, 85, 0.6), 0 0 20px -4px rgba(255, 190, 85, 0.75);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.tile.probed {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.tile.probed::after {
+  opacity: 0;
+}
+
+.tile[data-band="0"] {
+  background: radial-gradient(circle at 50% 55%, #ffffff, #d9c4ff 55%, #9d76e8);
+  border-color: #fff;
+  box-shadow: 0 0 26px -2px rgba(210, 180, 255, 0.85);
+  animation: catchPop 0.5s ease-out;
+}
+
+.tile[data-band="1"] {
+  background: radial-gradient(circle at 50% 60%, rgba(255, 90, 106, 0.55), rgba(90, 20, 40, 0.55));
+  border-color: rgba(255, 90, 106, 0.6);
+}
+
+.tile[data-band="2"] {
+  background: radial-gradient(circle at 50% 60%, rgba(255, 181, 69, 0.45), rgba(80, 50, 10, 0.5));
+  border-color: rgba(255, 181, 69, 0.5);
+}
+
+.tile[data-band="3"] {
+  background: radial-gradient(circle at 50% 60%, rgba(110, 168, 255, 0.3), rgba(16, 26, 56, 0.6));
+  border-color: rgba(110, 168, 255, 0.35);
+}
+
+.tile .glyph {
+  position: relative;
+  z-index: 1;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+.tile.fresh {
+  animation: tileIn 0.42s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.tile.sweeping::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255, 214, 140, 0.9), transparent 65%);
+  animation: sweep 0.45s ease-out forwards;
+  z-index: 2;
+  pointer-events: none;
+}
+
+@keyframes tileIn {
+  from {
+    transform: scale(0.82);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes sweep {
+  from {
+    opacity: 0.95;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes catchPop {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9);
+  }
+  45% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 12px rgba(255, 255, 255, 0.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* The ghost, rendered inside its room once the day is over. */
+.ghost-mark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 3;
+  animation: ghostIn 0.6s ease-out both;
+}
+
+.ghost-mark svg {
+  width: 92%;
+  height: 92%;
+  filter: drop-shadow(0 0 8px rgba(220, 200, 255, 0.95));
+  animation: float 3.4s ease-in-out infinite;
+}
+
+@keyframes ghostIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(-3%) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(3%) rotate(2deg);
+  }
+}
+
+/* ----------------------------------------------------------------- overlay */
+
+.overlay {
+  position: absolute;
+  inset: -6px;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border-radius: 20px;
+  background: rgba(7, 4, 14, 0.78);
+  backdrop-filter: blur(7px);
+  z-index: 10;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.overlay-card {
+  width: 100%;
+  text-align: center;
+  padding: 6px 4px;
+}
+
+.ghost-art {
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 4px;
+}
+
+.ghost-art svg {
+  width: 100%;
+  height: 100%;
+  animation: float 3.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 16px rgba(190, 160, 255, 0.85));
+}
+
+.ghost-art.gone svg {
+  opacity: 0.35;
+  filter: grayscale(0.7) blur(0.6px);
+  animation: none;
+}
+
+#result-title {
+  margin: 3px 0 4px;
+  font-family: var(--font-spooky);
+  font-size: 21px;
+  letter-spacing: 0.01em;
+}
+
+#result-text {
+  margin: 0 auto 12px;
+  max-width: 32ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+#result-text b {
+  color: var(--amber);
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  max-width: 260px;
+  margin: 0 auto;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ----------------------------------------------------------------- buttons */
+
+.btn {
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  padding: 11px 16px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.btn:active {
+  transform: translateY(1px) scale(0.995);
+}
+
+.btn.primary {
+  color: #2a1600;
+  background: linear-gradient(180deg, #ffd489, var(--amber-hot));
+  box-shadow: 0 8px 24px -10px rgba(255, 170, 60, 0.9);
+}
+
+.btn.primary:hover {
+  box-shadow: 0 10px 28px -8px rgba(255, 190, 85, 0.95);
+}
+
+.btn.ghost-btn {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line);
+}
+
+.btn.ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------ panels */
+
+.panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.panel {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.panel h3 {
+  margin: 0 0 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+}
+
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.list .rank {
+  width: 1.1em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.list .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list .score {
+  color: var(--amber);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.list li.you .name {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.list .empty {
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.stats {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.stats b {
+  color: var(--ink);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.footnote {
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(169, 158, 208, 0.75);
+}
+
+/* ------------------------------------------------------------------- toast */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translate(-50%, 12px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: rgba(30, 20, 52, 0.96);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 30px -12px #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 40;
+  max-width: 84vw;
+  text-align: center;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ------------------------------------------------------------------ splash */
+
+.splash .scene {
+  min-height: 100dvh;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.splash .hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.splash .hero-art {
+  width: 66px;
+  height: 66px;
+  flex: 0 0 auto;
+}
+
+.splash .hero-art svg {
+  width: 100%;
+  height: 100%;
+  animation: float 3.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 14px rgba(190, 160, 255, 0.8));
+}
+
+.splash .hero-copy {
+  min-width: 0;
+}
+
+.splash .hero-copy h1 {
+  margin: 0 0 2px;
+  font-family: var(--font-spooky);
+  font-size: 17px;
+  letter-spacing: 0.01em;
+}
+
+.splash .hero-copy p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.splash .chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.chip b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.chip.flame {
+  color: var(--amber);
+  border-color: rgba(255, 190, 85, 0.4);
+  background: rgba(255, 190, 85, 0.1);
+}
+
+.splash .cta {
+  width: 100%;
+}
+
+/* Wider viewports: board beside the panels. */
+@media (min-width: 560px) {
+  .scene {
+    max-width: 720px;
+  }
+
+  .game .scene {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 232px;
+    grid-template-areas:
+      "hud hud"
+      "hint hint"
+      "board panels"
+      "board foot";
+    align-content: start;
+    align-items: start;
+    gap: 14px;
+  }
+
+  .game .hud {
+    grid-area: hud;
+  }
+
+  .game .hint {
+    grid-area: hint;
+    text-align: left;
+  }
+
+  .game .board {
+    grid-area: board;
+  }
+
+  .game .panels {
+    grid-area: panels;
+    grid-template-columns: 1fr;
+  }
+
+  .game .stats {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .game .footnote {
+    grid-area: foot;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+      .preview-ribbon + .scene {
+        padding-top: 30px;
+      }
+
+      .preview-ribbon {
+        position: fixed;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 60;
+        padding: 4px 12px 5px;
+        border-radius: 0 0 10px 10px;
+        background: rgba(255, 190, 85, 0.16);
+        border: 1px solid rgba(255, 190, 85, 0.35);
+        border-top: none;
+        color: #ffd489;
+        font: 600 10.5px/1.3 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body class="game">
+    <div class="preview-ribbon">Preview build · mock Redis in your browser</div>
+
+    <div class="scene">
+      <header class="hud">
+        <div class="hud-left">
+          <span class="logo">👻</span>
+          <span class="title">Ghost of the Day <b id="dayno">#…</b></span>
+        </div>
+        <div class="hud-right">
+          <div class="candles" id="candles" aria-label="Candles left"></div>
+          <div class="streak idle" id="streak">🔥 0</div>
+        </div>
+      </header>
+
+      <p class="hint" id="hint">
+        Sweep a room with your candle. <strong>🔥 scorching</strong> means the ghost is
+        within a few rooms, <strong>🧊 freezing</strong> means it is far.
+      </p>
+
+      <main class="board" id="board">
+        <div class="grid" id="grid" role="grid" aria-label="Haunted mansion"></div>
+        <div class="overlay hidden" id="overlay" role="dialog" aria-modal="true">
+          <div class="overlay-card">
+            <div class="ghost-art" id="ghost-art"></div>
+            <h2 id="result-title">Caught it!</h2>
+            <p id="result-text"></p>
+            <div class="result-actions">
+              <button type="button" class="btn primary" id="share-btn">
+                Share to thread
+              </button>
+              <button type="button" class="btn ghost-btn" id="copy-btn">
+                Copy result
+              </button>
+              <button type="button" class="btn ghost-btn" id="close-btn">
+                Back to the mansion
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <aside class="panels">
+        <section class="panel">
+          <h3>Tonight's fastest</h3>
+          <ol class="list" id="board-list"></ol>
+        </section>
+        <section class="panel">
+          <h3>🔥 Longest streaks</h3>
+          <ol class="list" id="streak-list"></ol>
+        </section>
+        <section class="panel stats" id="stats">
+          <span>Hunters today <b id="stat-plays">0</b></span>
+          <span>Caught <b id="stat-rate">0%</b></span>
+          <span>Avg candles <b id="stat-avg">—</b></span>
+        </section>
+      </aside>
+
+      <p class="footnote">
+        Preview build — play the shipped client bundle against a fake backend. Real
+        players share one ghost per UTC day, with leaderboards and streaks in Redis.
+      </p>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+/**
+ * Preview-only fake backend.
+ *
+ * The real app talks to `/api/*` endpoints served by Devvit. This file stubs
+ * `fetch` with the same payload shapes and the same rules so the *actual built
+ * client bundle* can run as a plain HTML file (and be demoed offline).
+ *
+ * Rules are duplicated here on purpose: this file never ships to Reddit.
+ */
+(function () {
+  var GRID = 7;
+  var ROOMS = 49;
+  var CANDLES = 6;
+
+  function hash32(s) {
+    var h = 2166136261 >>> 0;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function today() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function dayNumber(day) {
+    var parts = day.split('-').map(Number);
+    var epoch = Date.UTC(2026, 0, 1);
+    var then = Date.UTC(parts[0], parts[1] - 1, parts[2]);
+    return Math.floor((then - epoch) / 86400000) + 1;
+  }
+
+  function ghostRoom(day) {
+    return Math.floor(mulberry32(hash32('ghost-of-the-day:v1:' + day))() * ROOMS);
+  }
+
+  function distance(a, b) {
+    return Math.abs(Math.floor(a / GRID) - Math.floor(b / GRID)) + Math.abs((a % GRID) - (b % GRID));
+  }
+
+  function band(d) {
+    if (d <= 0) return 0;
+    if (d <= 3) return 1;
+    if (d <= 6) return 2;
+    return 3;
+  }
+
+  // Sandboxed iframes (like the workspace viewer) throw on localStorage.
+  var store = (function () {
+    try {
+      window.localStorage.setItem('__probe__', '1');
+      window.localStorage.removeItem('__probe__');
+      return window.localStorage;
+    } catch (e) {
+      var mem = {};
+      return {
+        getItem: function (k) {
+          return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null;
+        },
+        setItem: function (k, v) {
+          mem[k] = String(v);
+        },
+        removeItem: function (k) {
+          delete mem[k];
+        },
+      };
+    }
+  })();
+
+  function read(key, fallback) {
+    try {
+      var raw = store.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function write(key, value) {
+    try {
+      store.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      /* quota or blocked: preview still plays */
+    }
+  }
+
+  function play(day) {
+    var p = read('god:play:' + day, { p: [], s: 0 });
+    if (!Array.isArray(p.p)) p = { p: [], s: 0 };
+    return p;
+  }
+
+  function stats() {
+    return read('god:stats', { streak: 0, best: 0, last: '', wins: 0, plays: 0, total: 0 });
+  }
+
+  var HUNTERS = [
+    'ghosted_again',
+    'candle_hoe',
+    'spooky_szn',
+    'room_D4',
+    'midnight_mod',
+    'casper_fan',
+    'vault_13',
+    'snoo_ghost',
+    'third_floor',
+    'ouija_enjoyer',
+  ];
+
+  function fakeBoard(day) {
+    var rand = mulberry32(hash32('board:' + day));
+    var pool = HUNTERS.slice();
+    var out = [];
+    var count = 3 + Math.floor(rand() * 4);
+    for (var i = 0; i < count && pool.length; i++) {
+      var idx = Math.floor(rand() * pool.length);
+      var name = pool.splice(idx, 1)[0];
+      out.push({ name: name, candles: 2 + Math.floor(rand() * 5), isYou: false });
+    }
+    return out;
+  }
+
+  function fakeStreaks(day) {
+    var rand = mulberry32(hash32('streaks:' + day));
+    var out = [];
+    for (var i = 0; i < 3 && i < HUNTERS.length; i++) {
+      out.push({
+        name: HUNTERS[(i * 3 + 1) % HUNTERS.length],
+        streak: 2 + Math.floor(rand() * 12),
+        isYou: false,
+      });
+    }
+    return out;
+  }
+
+  function payload() {
+    var day = today();
+    var p = play(day);
+    var st = stats();
+    var ghosts = ghostRoom(day);
+    var mine = read('god:board:' + day, []);
+    var board = fakeBoard(day);
+    var used = p.p.length;
+    var status = p.s === 1 ? 'caught' : p.s === 2 ? 'fled' : 'playing';
+    var you = {
+      day: day,
+      number: dayNumber(day),
+      grid: GRID,
+      candles: CANDLES,
+      candlesLeft: Math.max(CANDLES - used, 0),
+      probes: p.p.map(function (pair) {
+        return { i: pair[0], b: pair[1] };
+      }),
+      status: status,
+      ghost: status === 'playing' ? null : ghosts,
+      streak: st.streak,
+      best: st.best,
+      wins: st.wins,
+      plays: st.plays,
+    };
+    if (mine.length) {
+      board.push({ name: 'you_preview', candles: mine[0], isYou: true });
+    }
+    board.sort(function (a, b) {
+      return a.candles - b.candles;
+    });
+    var plays = 54 + (dayNumber(day) % 89);
+    var catches = Math.round(plays * 0.74);
+    return {
+      player: you,
+      board: board.slice(0, 5),
+      streaks: fakeStreaks(day),
+      stats: {
+        plays: plays,
+        catches: catches,
+        catchRate: catches / plays,
+        avgCandles: 4.3 + ((dayNumber(day) % 7) / 20),
+      },
+      username: 'you_preview',
+    };
+  }
+
+  function finalize(day, p) {
+    var st = stats();
+    if (st.last === day) return;
+    var used = p.p.length;
+    var caught = p.s === 1;
+    var yesterday = new Date(Date.UTC.apply(null, day.split('-').map(Number)) - 86400000)
+      .toISOString()
+      .slice(0, 10);
+    var streak = 0;
+    if (caught) {
+      streak = st.last === yesterday ? st.streak + 1 : 1;
+      st.wins += 1;
+      st.total += used;
+      write('god:board:' + day, [used]);
+    }
+    st.streak = streak;
+    st.best = Math.max(st.best, streak);
+    st.plays += 1;
+    st.last = day;
+    write('god:stats', st);
+  }
+
+  function json(body) {
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  }
+
+  var realFetch = window.fetch ? window.fetch.bind(window) : undefined;
+
+  window.fetch = function (url, init) {
+    var path = String(url).replace(/^\.?\//, '');
+    if (path.indexOf('api/') !== 0) {
+      return realFetch ? realFetch(url, init) : json({ error: 'no network', status: 500 });
+    }
+    var day = today();
+
+    if (path === 'api/state') return json(payload());
+
+    if (path === 'api/probe') {
+      var body = {};
+      try {
+        body = JSON.parse((init && init.body) || '{}');
+      } catch (e) {
+        body = {};
+      }
+      var cell = Number(body.i);
+      var p = play(day);
+      var existing = p.p.find(function (pair) {
+        return pair[0] === cell;
+      });
+      if (existing) {
+        var out = payload();
+        return json(Object.assign({}, out, { band: existing[1] }));
+      }
+      if (p.s !== 0 || p.p.length >= CANDLES || !(cell >= 0 && cell < ROOMS)) {
+        return json(Object.assign({}, payload(), { band: null }));
+      }
+      var reading = band(distance(cell, ghostRoom(day)));
+      p.p.push([cell, reading]);
+      if (reading === 0) p.s = 1;
+      else if (p.p.length >= CANDLES) p.s = 2;
+      write('god:play:' + day, p);
+      if (p.s !== 0) finalize(day, p);
+      return json(Object.assign({}, payload(), { band: reading }));
+    }
+
+    if (path === 'api/share') {
+      return json({
+        status: 'posted',
+        message: 'Preview mode — in Reddit this posts your result as a spoiler-tagged comment.',
+      });
+    }
+
+    return json({ error: 'not found', status: 404 });
+  };
+})();
+
+    </script>
+    <script type="module">
+var N="2026-01-01",b=[{label:"IT IS HERE",blurb:"The candle gutters. Something is in this room.",emoji:"\u{1F47B}",tone:"here"},{label:"SCORCHING",blurb:"The air is thick and freezing at once. Very close.",emoji:"\u{1F525}",tone:"hot"},{label:"WARM",blurb:"A draught from a nearby room. Warm-ish.",emoji:"\u{1F321}\uFE0F",tone:"warm"},{label:"FREEZING",blurb:"Nothing but dust and cold stone here.",emoji:"\u{1F9CA}",tone:"cold"}];function j(t){return Math.floor((P(t)-P(N))/864e5)+1}function P(t){let[e,r,n]=t.split("-").map(Number);return Date.UTC(e??1970,(r??1)-1,n??1)}function V(t){let e=new Array(49).fill("\u2B1B");for(let n of t){let s=b[n.b];s&&n.i>=0&&n.i<49&&(e[n.i]=s.emoji)}let r=[];for(let n=0;n<7;n++)r.push(e.slice(n*7,n*7+7).join(""));return r.join(`
+`)}function L(t){let e=t.probes.length,r=`\u{1F47B} **Ghost of the Day #${j(t.day)}**`,n=t.status==="caught"?e===1?"Caught it on the first sweep. I am never playing again. \u{1F56F}\uFE0F\u2728":`Caught in ${e}/6 candles \u{1F56F}\uFE0F \xB7 \u{1F525} streak ${t.streak}`:"The ghost slipped away. All 6 candles burned out \u{1F4A8}",s=V(t.probes).split(`
+`).map(o=>`>!${o}!<`).join(`
+`);return[`${r}`,"",s,"",n,"","#GhostOfTheDay"].join(`
+`)}var l={State:"api/state",Probe:"api/probe",Share:"api/share",OnAppInstall:"internal/on/app/install",OnMenuNewPost:"internal/on/menu/new-post",OnDailyPost:"internal/on/scheduler/daily-post"},tt={[l.State]:"GET",[l.Probe]:"POST",[l.Share]:"POST",[l.OnAppInstall]:"POST",[l.OnMenuNewPost]:"POST",[l.OnDailyPost]:"POST"};async function y(t,e){let r;try{r=await fetch(t,{...e,headers:{Accept:"application/json",...e?.headers??{}}})}catch(n){throw Error(`Network error: ${n instanceof Error?n.message:String(n)}`)}if(!r.ok){let n=await r.json().catch(()=>{});throw Error(n?.error??`HTTP ${r.status} ${r.statusText}`)}return await r.json()}function $(){return y(l.State)}function M(t){return y(l.Probe,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({i:t})})}function v(){return y(l.Share,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})}function a(t){let e=document.getElementById(t);if(!e)throw Error(`missing #${t}`);return e}function m(t){let e=String.fromCharCode(65+t%7),r=Math.floor(t/7)+1;return`${e}${r}`}var q=0;function x(){let t=`ghost-grad-${q++}`;return`<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="${t}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c6adff"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 4C19 4 11 14 11 28v24c0 2.2 2.2 3.4 3.9 2.2l4.6-3.7 4.4 4.5c1 1 2.6 1 3.6 0L32 50.8l4.5 4.2c1 1 2.6 1 3.6 0l4.4-4.5 4.6 3.7c1.7 1.2 3.9 0 3.9-2.2V28C53 14 45 4 32 4z" fill="url(#${t})"/>
+  <ellipse cx="23.5" cy="27" rx="3.7" ry="4.8" fill="#221041"/>
+  <ellipse cx="40.5" cy="27" rx="3.7" ry="4.8" fill="#221041"/>
+  <ellipse cx="25" cy="25.2" rx="1.3" ry="1.7" fill="#ffffff" opacity="0.92"/>
+  <ellipse cx="42" cy="25.2" rx="1.3" ry="1.7" fill="#ffffff" opacity="0.92"/>
+  <ellipse cx="32" cy="40" rx="4.4" ry="2.6" fill="#3b1f66" opacity="0.55"/>
+</svg>`}function S(t,e=!1){t.classList.toggle("gone",e),t.innerHTML=x()}var g;function p(t){let e=a("toast");e.textContent=t,e.classList.add("show"),g&&window.clearTimeout(g),g=window.setTimeout(()=>e.classList.remove("show"),2800)}function D(t){a("dayno").textContent=`#${t.number}`;let e=a("candles"),r=t.candles-t.candlesLeft,n="";for(let i=0;i<6;i++)n+=`<span class="${i<r?"spent":""}">\u{1F56F}\uFE0F</span>`;e.innerHTML=n,e.setAttribute("aria-label",`${t.candlesLeft} of ${6} candles left`);let s=a("streak"),o=t.streak>0;s.textContent=`\u{1F525} ${t.streak}`,s.classList.toggle("idle",!o),s.title=o?`Caught ${t.streak} day${t.streak===1?"":"s"} in a row`:"No streak yet \u2014 catch it today to start one"}function k(t){let e=a("hint"),r=t.ghost;if(t.status==="caught"){e.innerHTML=`Caught it in <strong>${t.probes.length}/${t.candles}</strong> candles. New ghost tomorrow at 00:00 UTC.`;return}if(t.status==="fled"){e.innerHTML=r===null?"The candles burned out. The ghost is still in there.":`The candles burned out. It was hiding in <strong>${m(r)}</strong> all along.`;return}e.innerHTML=t.probes.length===0?`Sweep a room with your candle. <strong>\u{1F525} scorching</strong> means close, <strong>\u{1F9CA} freezing</strong> means far. ${t.candles} candles, one ghost.`:`<strong>${t.candlesLeft}</strong> candle${t.candlesLeft===1?"":"s"} left. Narrow it down: every sweep scores the same mansion.`}function H(t){let e=a("board-list"),r=a("streak-list");e.innerHTML=t.board.length?t.board.map((n,s)=>C(s,n.name,`${n.candles} \u{1F56F}\uFE0F`,n.isYou)).join(""):'<li class="empty">Nobody yet. Be the first catch.</li>',r.innerHTML=t.streaks.length?t.streaks.map((n,s)=>C(s,n.name,`${n.streak} \u{1F525}`,n.isYou)).join(""):'<li class="empty">No streaks yet.</li>',a("stat-plays").textContent=String(t.stats.plays),a("stat-rate").textContent=t.stats.plays>0?`${Math.round(t.stats.catchRate*100)}%`:"\u2014",a("stat-avg").textContent=t.stats.catches>0?t.stats.avgCandles.toFixed(1):"\u2014"}function C(t,e,r,n){return`<li class="${n?"you":""}"${n?' title="you"':""}>
+    <span class="rank">${t+1}</span>
+    <span class="name">${_(e)}</span>
+    <span class="score">${r}</span>
+  </li>`}function _(t){return t.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}function T(t){let e=b[t];return e?e.emoji:"\u2B1B"}var u=null,w=!1,I=new Set,f=a("grid"),E=a("overlay"),c=a("share-btn"),Y=a("copy-btn"),z=a("close-btn");function U(){f.style.setProperty("--grid",String(7));for(let t=0;t<49;t++){let e=document.createElement("button");e.type="button",e.className="tile can-probe",e.dataset.i=String(t),e.setAttribute("role","gridcell"),e.setAttribute("aria-label",`Sweep room ${m(t)}`),f.append(e)}}function G(t){let e=u!==null&&u.player.status!=="playing";u=t,D(t.player),k(t.player),H(t),F(),!e&&t.player.status!=="playing"&&E.classList.contains("hidden")}function F(){let t=u;if(!t)return;let e=new Map;for(let s of t.player.probes)e.set(s.i,s.b);let r=t.player.status!=="playing"||t.username===null,n=new Set;for(let s=0;s<49;s++){let o=f.children[s];if(!o)continue;let i=e.get(s);if(i===void 0){o.className=r?"tile":"tile can-probe",o.removeAttribute("data-band"),o.disabled=r,o.innerHTML="",o.setAttribute("aria-label",`Sweep room ${m(s)}`);continue}let d=!I.has(s);d&&n.add(s),o.className=`tile probed${d?" fresh":""}`,o.dataset.band=String(i),o.disabled=!0,o.innerHTML=`<span class="glyph">${T(i)}</span>`,o.setAttribute("aria-label",`Room ${m(s)}: ${T(i)}`)}if(I=new Set(e.keys()),t.player.ghost!==null){let s=f.children[t.player.ghost],o=t.player.status==="caught";s&&(s.dataset.band="0",s.innerHTML=`<span class="ghost-mark" style="opacity:${o?1:.55}">${x()}</span>`)}if(n.size>0)for(let s of n)f.children[s]?.classList.add("fresh")}async function W(t,e){let r=u;if(!(!r||w)&&!(r.player.status!=="playing"||r.username===null)&&!r.player.probes.some(n=>n.i===t)&&!(r.player.candlesLeft<=0)){w=!0,e.classList.add("sweeping");try{let n=await M(t);G(n),n.player.status!=="playing"&&window.setTimeout(()=>O(),460)}catch(n){p(n instanceof Error?n.message:"The candle blew out. Try again."),e.classList.remove("sweeping")}finally{w=!1}}}function O(){let t=u;if(!t)return;let{status:e,probes:r,candles:n,ghost:s,number:o,streak:i}=t.player,d=e==="caught";S(a("ghost-art"),!d),a("result-title").textContent=d?"Caught it. \u{1F47B}":"It slipped away. \u{1F4A8}";let B=d?i>1?` \u2014 \u{1F525} streak <b>${i}</b>.`:".":"";a("result-text").innerHTML=d?`You cornered the ghost in <b>${r.length}/${n}</b> candles${B} Ghost #${o+1} appears tomorrow at 00:00 UTC.`:s!==null?`All ${n} candles burned out. It was hiding in <b>${m(s)}</b>. Ghost #${o+1} appears tomorrow at 00:00 UTC.`:`All ${n} candles burned out.`,c.disabled=!1,c.textContent="Share to thread",E.classList.remove("hidden")}async function J(){c.disabled=!0,c.textContent="Posting\u2026";try{let t=await v();p(t.message),c.textContent=t.status==="error"?"Share to thread":"Shared \u2713"}catch(t){p(t instanceof Error?t.message:"Could not post that comment."),c.textContent="Share to thread"}finally{c.disabled=!1}}async function X(){let t=u;if(!t)return;let e=L({day:t.player.day,probes:t.player.probes,status:t.player.status,streak:t.player.streak}).replaceAll(/^>!(.*)!$/gm,"$1");await Z(e)?p("Result copied. Paste it anywhere."):p("Clipboard is blocked here \u2014 post it to the thread instead.")}async function Z(t){try{if(navigator.clipboard&&window.isSecureContext)return await navigator.clipboard.writeText(t),!0}catch{}try{let e=document.createElement("textarea");e.value=t,e.setAttribute("readonly",""),e.style.position="fixed",e.style.top="-1000px",document.body.append(e),e.select();let r=document.execCommand("copy");return e.remove(),r}catch{return!1}}async function K(){U(),S(a("ghost-art")),f.addEventListener("click",e=>{let r=e.target?.closest("button.tile");r instanceof HTMLButtonElement&&W(Number(r.dataset.i),r)}),c.addEventListener("click",()=>{J()}),Y.addEventListener("click",()=>{X()}),z.addEventListener("click",()=>E.classList.add("hidden"));try{G(await $())}catch(e){p(e instanceof Error?e.message:"Could not reach the mansion.");return}let t=u;if(t){if(t.username===null){a("hint").innerHTML="<strong>Sign in to Reddit</strong> to hunt today\u2019s ghost \u2014 it is the same ghost for everyone.";return}t.player.status!=="playing"&&O()}}K();
+//# sourceMappingURL=game.js.map
+
+    </script>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5c74bdbd853b7dc',t:'MTc5NTAwODI3NQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5c74bdbd853b7dc',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
