@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>👻 Ghost of the Day — playable preview</title>
+    <style>
+/*{{CSS}}*/
+      .preview-ribbon + .scene {
+        padding-top: 30px;
+      }
+
+      .preview-ribbon {
+        position: fixed;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 60;
+        padding: 4px 12px 5px;
+        border-radius: 0 0 10px 10px;
+        background: rgba(255, 190, 85, 0.16);
+        border: 1px solid rgba(255, 190, 85, 0.35);
+        border-top: none;
+        color: #ffd489;
+        font: 600 10.5px/1.3 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body class="game">
+    <div class="preview-ribbon">Preview build · mock Redis in your browser</div>
+
+    <div class="scene">
+      <header class="hud">
+        <div class="hud-left">
+          <span class="logo">👻</span>
+          <span class="title">Ghost of the Day <b id="dayno">#…</b></span>
+        </div>
+        <div class="hud-right">
+          <div class="candles" id="candles" aria-label="Candles left"></div>
+          <div class="streak idle" id="streak">🔥 0</div>
+        </div>
+      </header>
+
+      <p class="hint" id="hint">
+        Sweep a room with your candle. <strong>🔥 scorching</strong> means the ghost is
+        within a few rooms, <strong>🧊 freezing</strong> means it is far.
+      </p>
+
+      <main class="board" id="board">
+        <div class="grid" id="grid" role="grid" aria-label="Haunted mansion"></div>
+        <div class="overlay hidden" id="overlay" role="dialog" aria-modal="true">
+          <div class="overlay-card">
+            <div class="ghost-art" id="ghost-art"></div>
+            <h2 id="result-title">Caught it!</h2>
+            <p id="result-text"></p>
+            <div class="result-actions">
+              <button type="button" class="btn primary" id="share-btn">
+                Share to thread
+              </button>
+              <button type="button" class="btn ghost-btn" id="copy-btn">
+                Copy result
+              </button>
+              <button type="button" class="btn ghost-btn" id="close-btn">
+                Back to the mansion
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <aside class="panels">
+        <section class="panel">
+          <h3>Tonight's fastest</h3>
+          <ol class="list" id="board-list"></ol>
+        </section>
+        <section class="panel">
+          <h3>🔥 Longest streaks</h3>
+          <ol class="list" id="streak-list"></ol>
+        </section>
+        <section class="panel stats" id="stats">
+          <span>Hunters today <b id="stat-plays">0</b></span>
+          <span>Caught <b id="stat-rate">0%</b></span>
+          <span>Avg candles <b id="stat-avg">—</b></span>
+        </section>
+      </aside>
+
+      <p class="footnote">
+        Preview build — play the shipped client bundle against a fake backend. Real
+        players share one ghost per UTC day, with leaderboards and streaks in Redis.
+      </p>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+/*{{MOCK}}*/
+    </script>
+    <script type="module">
+/*{{APP}}*/
+    </script>
+  </body>
+</html>

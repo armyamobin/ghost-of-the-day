@@ -1,0 +1,31 @@
+{
+  "private": true,
+  "name": "ghost-daily",
+  "version": "0.0.1",
+  "license": "BSD-3-Clause",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:client -- --minify && npm run build:server -- --minify",
+    "build:client": "esbuild --bundle --log-level=warning --sourcemap=linked --target=es2023 --format=esm --outdir=public --platform=browser src/client/splash.ts src/client/game.ts",
+    "build:server": "esbuild --bundle --log-level=warning --sourcemap=linked --target=es2023 --format=cjs --outdir=dist/server --platform=node src/server/index.ts",
+    "clean": "rm -rf dist/ public/*.js*",
+    "dev": "sh -c 'trap \"kill 0\" exit; npm run build:client -- --watch=forever& npm run build:server -- --watch=forever& wait' --",
+    "playtest": "npm run build && devvit playtest",
+    "test": "npm run test:types && npm run test:unit",
+    "test:types": "tsc --build",
+    "test:unit": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test \"src/**/*.test.ts\"",
+    "publish": "npm run clean && npm run build && devvit publish",
+    "upload": "npm run build && devvit upload",
+    "preview": "npm run build && node preview/build.mjs"
+  },
+  "devDependencies": {
+    "@devvit/web": "0.15.4",
+    "@types/node": "24.19.2",
+    "devvit": "0.15.4",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "ghost-daily",
+  "post": {
+    "entrypoints": {
+      "default": {
+        "entry": "splash.html"
+      },
+      "game": {
+        "entry": "game.html"
+      }
+    }
+  },
+  "server": {},
+  "permissions": {
+    "redis": true,
+    "reddit": {
+      "enable": true,
+      "asUser": [
+        "SUBMIT_COMMENT"
+      ]
+    }
+  },
+  "menu": {
+    "items": [
+      {
+        "label": "\ud83d\udc7b Post today's ghost hunt",
+        "description": "Create a Ghost of the Day post for the community.",
+        "location": "subreddit",
+        "endpoint": "/internal/on/menu/new-post"
+      }
+    ]
+  },
+  "triggers": {
+    "onAppInstall": "/internal/on/app/install"
+  },
+  "scheduler": {
+    "tasks": {
+      "daily-ghost-post": {
+        "endpoint": "/internal/on/scheduler/daily-post",
+        "cron": "0 0 * * *"
+      }
+    }
+  },
+  "marketingAssets": {
+    "icon": "assets/icon.png"
+  }
+}
